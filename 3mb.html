@@ -1,0 +1,1007 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>画像を3MB未満に自動圧縮 | スマート画像コンプレッサー</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts: Inter & Noto Sans JP -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['"Inter"', '"Noto Sans JP"', 'sans-serif'],
+                    },
+                    colors: {
+                        brand: {
+                            50: '#eef2ff',
+                            100: '#e0e7ff',
+                            200: '#c7d2fe',
+                            500: '#6366f1',
+                            600: '#4f46e5',
+                            700: '#4338ca',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col antialiased selection:bg-brand-100 selection:text-brand-700">
+
+    <!-- ヘッダー -->
+    <header class="bg-white border-b border-slate-200/80 sticky top-0 z-30 backdrop-blur-md bg-white/90">
+        <div class="max-w-5xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
+            <div class="flex items-center gap-2.5">
+                <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-brand-600 to-indigo-500 flex items-center justify-center text-white shadow-sm shadow-brand-500/20">
+                    <i data-lucide="shrink" class="w-5 h-5"></i>
+                </div>
+                <div>
+                    <h1 class="font-bold text-base sm:text-lg tracking-tight text-slate-900 leading-tight">
+                        画像を3MBギリギリに自動圧縮
+                    </h1>
+                    <p class="text-[11px] text-slate-500 hidden sm:block">画質・解像度を限界まで保ち3MBの天井直前へ精密調整</p>
+                </div>
+            </div>
+            <div class="flex items-center gap-2 text-xs font-medium text-emerald-700 bg-emerald-50 border border-emerald-200/70 px-3 py-1.5 rounded-full">
+                <i data-lucide="shield-check" class="w-3.5 h-3.5 text-emerald-600 shrink-0"></i>
+                <span>ブラウザ内完結・サーバー送信なし</span>
+            </div>
+        </div>
+    </header>
+
+    <!-- メインコンテンツ -->
+    <main class="flex-1 max-w-5xl w-full mx-auto px-4 sm:px-6 py-6 sm:py-10 space-y-6">
+
+        <!-- 設定バー & 目標サイズ説明 -->
+        <div class="bg-white rounded-2xl border border-slate-200/80 p-4 sm:p-5 shadow-sm flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+            <div class="space-y-1">
+                <div class="flex flex-wrap items-center gap-2">
+                    <span id="targetBadge" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-brand-50 text-brand-700 border border-brand-200/60">
+                        目標上限: 2.98MB (3,124,756 bytes)
+                    </span>
+                    <span id="targetSubNote" class="text-xs text-slate-400">※ 3MiB (3,145,728 bytes) の天井ギリギリを攻めます</span>
+                </div>
+                <p class="text-xs sm:text-sm text-slate-600">
+                    14段階の精密二分探索と細かな解像度調整により、3MBを超えない限界ギリギリの高画質を自動探索します。
+                </p>
+            </div>
+
+            <!-- 目標上限プリセット & 出力フォーマット選択 -->
+            <div class="flex flex-wrap items-center gap-3 pt-2 lg:pt-0 border-t lg:border-t-0 border-slate-100 shrink-0">
+                <div class="flex items-center gap-2">
+                    <label for="limitPresetSelect" class="text-xs font-semibold text-slate-600 whitespace-nowrap">上限基準:</label>
+                    <select id="limitPresetSelect" class="bg-slate-50 border border-slate-200 text-slate-800 text-xs sm:text-sm rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500 font-medium cursor-pointer">
+                        <option value="strict_giri" selected>3MBギリギリ (2.98MB / 3,124,756B)</option>
+                        <option value="decimal_giri">10進数3MBギリギリ (2,990,000B)</option>
+                        <option value="safe_margin">安全マージン (2.90MB / 3,040,870B)</option>
+                    </select>
+                </div>
+
+                <div class="flex items-center gap-2">
+                    <label for="formatSelect" class="text-xs font-semibold text-slate-600 whitespace-nowrap">形式:</label>
+                    <select id="formatSelect" class="bg-slate-50 border border-slate-200 text-slate-800 text-xs sm:text-sm rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500 font-medium cursor-pointer">
+                        <option value="auto" selected>自動最適化 (推奨)</option>
+                        <option value="image/jpeg">JPEG (写真向け)</option>
+                        <option value="image/webp">WebP (透過維持)</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <!-- ドロップゾーン -->
+        <div id="dropZone" class="relative group cursor-pointer rounded-2xl border-2 border-dashed border-slate-300 hover:border-brand-500 bg-white hover:bg-brand-50/30 transition-all duration-200 p-8 sm:p-12 text-center shadow-sm">
+            <input type="file" id="fileInput" class="hidden" accept="image/jpeg,image/png,image/webp,image/bmp,image/gif" multiple>
+            
+            <div class="max-w-md mx-auto flex flex-col items-center space-y-4">
+                <div class="w-14 h-14 rounded-2xl bg-brand-50 text-brand-600 group-hover:scale-105 group-hover:bg-brand-100 transition-transform duration-200 flex items-center justify-center shadow-inner">
+                    <i data-lucide="image-plus" class="w-7 h-7"></i>
+                </div>
+                <div class="space-y-1.5">
+                    <p class="text-base sm:text-lg font-bold text-slate-800">
+                        画像をドラッグ＆ドロップ、またはクリックして選択
+                    </p>
+                    <p class="text-xs sm:text-sm text-slate-500">
+                        JPEG, PNG, WebP などに対応（複数画像の同時アップロード可）
+                    </p>
+                </div>
+                <button type="button" id="selectBtn" class="mt-2 inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-brand-600 hover:bg-brand-700 active:scale-[0.99] text-white text-sm font-semibold shadow-sm shadow-brand-600/20 transition-all">
+                    <i data-lucide="folder-open" class="w-4 h-4"></i>
+                    <span>ファイルを選択する</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- アクションバー（画像追加後に表示） -->
+        <div id="actionBar" class="hidden flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm">
+            <div class="flex items-center gap-2 text-sm font-semibold text-slate-700">
+                <span id="summaryCount" class="bg-slate-100 text-slate-800 px-2.5 py-1 rounded-lg text-xs">0件の画像</span>
+                <span id="summaryStatus" class="text-xs text-slate-500 font-normal"></span>
+            </div>
+            <div class="flex items-center gap-2.5 self-end sm:self-auto">
+                <button type="button" id="clearAllBtn" class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-slate-200 hover:bg-slate-100 text-slate-600 text-xs sm:text-sm font-medium transition-colors">
+                    <i data-lucide="trash-2" class="w-4 h-4"></i>
+                    <span>すべてクリア</span>
+                </button>
+                <button type="button" id="downloadAllBtn" class="hidden inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs sm:text-sm font-semibold shadow-sm shadow-emerald-600/20 transition-all">
+                    <i data-lucide="download" class="w-4 h-4"></i>
+                    <span>すべてダウンロード</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- 画像結果リスト -->
+        <div id="imageList" class="space-y-4"></div>
+
+        <!-- プライバシー・使い方ガイド -->
+        <section class="pt-4">
+            <div class="bg-slate-100/80 border border-slate-200/70 rounded-2xl p-5 flex flex-col sm:flex-row items-start sm:items-center gap-4">
+                <div class="w-10 h-10 rounded-xl bg-white border border-slate-200 flex items-center justify-center text-slate-600 shrink-0">
+                    <i data-lucide="lock" class="w-5 h-5"></i>
+                </div>
+                <div class="space-y-1 text-xs sm:text-sm text-slate-600">
+                    <p class="font-semibold text-slate-800">プライバシー保護について</p>
+                    <p>処理はすべてお使いのブラウザ内（HTML5 Canvas）で行われ、画像が外部サーバーに送信・保存されることは一切ありません。機密性の高い資料やプライベートな写真でも安心してご利用いただけます。</p>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- フッター -->
+    <footer class="border-t border-slate-200/70 bg-white py-5 mt-auto">
+        <div class="max-w-5xl mx-auto px-4 sm:px-6 text-center text-xs text-slate-400">
+            スマート画像コンプレッサー — 厳密3MB未満自動最適化ツール
+        </div>
+    </footer>
+
+    <!-- Before / After 比較モーダル -->
+    <div id="compareModal" class="fixed inset-0 z-50 hidden bg-slate-900/75 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl max-w-4xl w-full max-h-[90vh] flex flex-col overflow-hidden shadow-2xl border border-slate-200">
+            <!-- モーダルヘッダー -->
+            <div class="px-5 py-4 border-b border-slate-100 flex items-center justify-between gap-4">
+                <div class="min-w-0">
+                    <h3 id="modalTitle" class="font-bold text-slate-900 text-sm sm:text-base truncate">画質比較プレビュー</h3>
+                    <p id="modalSubtitle" class="text-xs text-slate-500 mt-0.5"></p>
+                </div>
+                <button type="button" id="closeModalBtn" class="p-2 rounded-xl hover:bg-slate-100 text-slate-500 hover:text-slate-800 transition-colors">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+
+            <!-- 比較表示切り替えタブ（モバイル・デスクトップ両対応） -->
+            <div class="bg-slate-50 px-5 py-2.5 border-b border-slate-200/70 flex items-center justify-between flex-wrap gap-2">
+                <div class="inline-flex rounded-xl bg-slate-200/70 p-1 text-xs font-semibold">
+                    <button type="button" id="tabSideBySide" class="px-3 py-1.5 rounded-lg bg-white text-slate-800 shadow-sm transition-all">並べて比較</button>
+                    <button type="button" id="tabToggleView" class="px-3 py-1.5 rounded-lg text-slate-600 hover:text-slate-900 transition-all">切り替え比較</button>
+                </div>
+                <div id="toggleControls" class="hidden items-center gap-2">
+                    <button type="button" id="showOriginalBtn" class="px-3 py-1 rounded-lg text-xs font-semibold bg-slate-200 text-slate-700">元の画像</button>
+                    <button type="button" id="showCompressedBtn" class="px-3 py-1 rounded-lg text-xs font-semibold bg-brand-600 text-white">圧縮後</button>
+                </div>
+            </div>
+
+            <!-- 画像比較エリア -->
+            <div class="flex-1 overflow-auto p-4 sm:p-6 bg-slate-100/70 flex items-center justify-center">
+                <!-- 並べて比較 -->
+                <div id="sideBySideContainer" class="grid grid-cols-1 md:grid-cols-2 gap-4 w-full">
+                    <div class="bg-white p-3 rounded-xl border border-slate-200 flex flex-col">
+                        <div class="flex items-center justify-between text-xs font-semibold text-slate-600 mb-2">
+                            <span>元の画像</span>
+                            <span id="modalOrigMeta" class="text-slate-400 font-normal"></span>
+                        </div>
+                        <div class="flex-1 flex items-center justify-center bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTYiIGhlaWdodD0iMTYiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PHBhdGggZD0iTTAgMGg4djhIMHpNOCA4aDh2OEg4eiIgZmlsbD0iI2YxZjVmOSIvPjwvc3ZnPg==')] rounded-lg overflow-hidden min-h-[200px]">
+                            <img id="modalOrigImg" src="" alt="元の画像" class="max-h-[52vh] w-auto object-contain">
+                        </div>
+                    </div>
+                    <div class="bg-white p-3 rounded-xl border border-brand-200 flex flex-col">
+                        <div class="flex items-center justify-between text-xs font-semibold text-brand-700 mb-2">
+                            <span>圧縮後の画像</span>
+                            <span id="modalCompMeta" class="text-emerald-600 font-semibold"></span>
+                        </div>
+                        <div class="flex-1 flex items-center justify-center bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTYiIGhlaWdodD0iMTYiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PHBhdGggZD0iTTAgMGg4djhIMHpNOCA4aDh2OEg4eiIgZmlsbD0iI2YxZjVmOSIvPjwvc3ZnPg==')] rounded-lg overflow-hidden min-h-[200px]">
+                            <img id="modalCompImg" src="" alt="圧縮後の画像" class="max-h-[52vh] w-auto object-contain">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 切り替え比較 -->
+                <div id="singleToggleContainer" class="hidden w-full max-w-2xl bg-white p-3 rounded-xl border border-slate-200 flex-col">
+                    <div class="flex items-center justify-between text-xs font-semibold mb-2">
+                        <span id="singleViewLabel" class="text-brand-700">圧縮後の画像を表示中</span>
+                        <span id="singleViewMeta" class="text-slate-500"></span>
+                    </div>
+                    <div class="flex items-center justify-center bg-slate-50 rounded-lg overflow-hidden">
+                        <img id="modalSingleImg" src="" alt="プレビュー" class="max-h-[56vh] w-auto object-contain">
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- トースト通知 -->
+    <div id="toast" class="fixed bottom-5 right-5 z-50 transform translate-y-20 opacity-0 transition-all duration-300 pointer-events-none">
+        <div class="bg-slate-900 text-white text-xs sm:text-sm font-medium px-4 py-3 rounded-xl shadow-lg flex items-center gap-2.5">
+            <i data-lucide="info" class="w-4 h-4 text-brand-400 shrink-0"></i>
+            <span id="toastMessage"></span>
+        </div>
+    </div>
+
+    <script>
+        // アイコン初期化
+        lucide.createIcons();
+
+        // 上限プリセット定義
+        const LIMIT_PRESETS = {
+            strict_giri: {
+                ceilingBytes: 3 * 1024 * 1024, // 3,145,728 bytes (3MiB)
+                targetBytes: Math.floor(2.985 * 1024 * 1024), // 3,129,999 bytes (約2.985MB)
+                label: '2.98MB (3,129,999 bytes)',
+                note: '※ 3MiB (3,145,728 bytes) の天井ギリギリを攻めます'
+            },
+            decimal_giri: {
+                ceilingBytes: 3000000, // 3,000,000 bytes (10進数3MB)
+                targetBytes: 2990000,  // 2,990,000 bytes (2.99MB)
+                label: '2.99MB (2,990,000 bytes)',
+                note: '※ 3,000,000 bytes 制限のWebサービス向けギリギリ設定'
+            },
+            safe_margin: {
+                ceilingBytes: 3 * 1024 * 1024, // 3,145,728 bytes
+                targetBytes: Math.floor(2.90 * 1024 * 1024), // 3,040,870 bytes
+                label: '2.90MB (3,040,870 bytes)',
+                note: '※ 3MiB (3,145,728 bytes) に対して余裕を持たせた設定'
+            }
+        };
+
+        // 状態管理
+        const state = {
+            items: [], // { id, file, origUrl, compBlob, compUrl, origWidth, origHeight, compWidth, compHeight, status, alreadyUnder, outputMime, note, metrics, ceilingBytes }
+            modalItem: null,
+            modalMode: 'side', // 'side' | 'toggle'
+            toggleTarget: 'comp' // 'orig' | 'comp'
+        };
+
+        // DOM要素
+        const dropZone = document.getElementById('dropZone');
+        const fileInput = document.getElementById('fileInput');
+        const selectBtn = document.getElementById('selectBtn');
+        const limitPresetSelect = document.getElementById('limitPresetSelect');
+        const targetBadge = document.getElementById('targetBadge');
+        const targetSubNote = document.getElementById('targetSubNote');
+        const formatSelect = document.getElementById('formatSelect');
+        const actionBar = document.getElementById('actionBar');
+        const summaryCount = document.getElementById('summaryCount');
+        const summaryStatus = document.getElementById('summaryStatus');
+        const clearAllBtn = document.getElementById('clearAllBtn');
+        const downloadAllBtn = document.getElementById('downloadAllBtn');
+        const imageList = document.getElementById('imageList');
+
+        // プリセット変更時のバッジ更新
+        limitPresetSelect.addEventListener('change', () => {
+            const preset = LIMIT_PRESETS[limitPresetSelect.value];
+            if (preset) {
+                targetBadge.textContent = `目標上限: ${preset.label}`;
+                targetSubNote.textContent = preset.note;
+            }
+        });
+
+        // モーダル要素
+        const compareModal = document.getElementById('compareModal');
+        const closeModalBtn = document.getElementById('closeModalBtn');
+        const modalTitle = document.getElementById('modalTitle');
+        const modalSubtitle = document.getElementById('modalSubtitle');
+        const tabSideBySide = document.getElementById('tabSideBySide');
+        const tabToggleView = document.getElementById('tabToggleView');
+        const toggleControls = document.getElementById('toggleControls');
+        const showOriginalBtn = document.getElementById('showOriginalBtn');
+        const showCompressedBtn = document.getElementById('showCompressedBtn');
+        const sideBySideContainer = document.getElementById('sideBySideContainer');
+        const singleToggleContainer = document.getElementById('singleToggleContainer');
+        const modalOrigImg = document.getElementById('modalOrigImg');
+        const modalCompImg = document.getElementById('modalCompImg');
+        const modalOrigMeta = document.getElementById('modalOrigMeta');
+        const modalCompMeta = document.getElementById('modalCompMeta');
+        const modalSingleImg = document.getElementById('modalSingleImg');
+        const singleViewLabel = document.getElementById('singleViewLabel');
+        const singleViewMeta = document.getElementById('singleViewMeta');
+
+        // ユーティリティ: バイト数を読みやすい形式にフォーマット
+        function formatBytes(bytes, isDecimal = false) {
+            if (bytes === 0) return '0 B';
+            const divisor = isDecimal ? 1000 : 1024;
+            const mb = bytes / (divisor * divisor);
+            if (mb >= 0.1) {
+                return mb.toFixed(2) + ' MB';
+            }
+            const kb = bytes / divisor;
+            return kb.toFixed(1) + ' KB';
+        }
+
+        // トースト表示
+        let toastTimer = null;
+        function showToast(msg) {
+            const toast = document.getElementById('toast');
+            const toastMsg = document.getElementById('toastMessage');
+            toastMsg.textContent = msg;
+            toast.classList.remove('translate-y-20', 'opacity-0');
+            clearTimeout(toastTimer);
+            toastTimer = setTimeout(() => {
+                toast.classList.add('translate-y-20', 'opacity-0');
+            }, 3200);
+        }
+
+        // ドラッグ＆ドロップ & ファイル選択イベント
+        selectBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            fileInput.click();
+        });
+
+        dropZone.addEventListener('click', () => {
+            fileInput.click();
+        });
+
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropZone.classList.add('border-brand-500', 'bg-brand-50/50', 'scale-[1.005]');
+        });
+
+        dropZone.addEventListener('dragleave', () => {
+            dropZone.classList.remove('border-brand-500', 'bg-brand-50/50', 'scale-[1.005]');
+        });
+
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('border-brand-500', 'bg-brand-50/50', 'scale-[1.005]');
+            if (e.dataTransfer && e.dataTransfer.files) {
+                handleFiles(e.dataTransfer.files);
+            }
+        });
+
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files) {
+                handleFiles(e.target.files);
+                fileInput.value = '';
+            }
+        });
+
+        // ヘルパー: URLからHTMLImageElementを読み込む
+        function loadImageFromUrl(url) {
+            return new Promise((resolve, reject) => {
+                const img = new Image();
+                img.onload = () => resolve(img);
+                img.onerror = (err) => reject(err);
+                img.src = url;
+            });
+        }
+
+        // ヘルパー: 画像に透明ピクセル（アルファ値 < 255）が含まれるか判定
+        function hasTransparency(img) {
+            const canvas = document.createElement('canvas');
+            const maxDim = 256; // 高速判定用に縮小サンプリング
+            const scale = Math.min(1, maxDim / Math.max(img.naturalWidth, img.naturalHeight));
+            canvas.width = Math.max(1, Math.round(img.naturalWidth * scale));
+            canvas.height = Math.max(1, Math.round(img.naturalHeight * scale));
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+            const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+            for (let i = 3; i < data.length; i += 4) {
+                if (data[i] < 255) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        // ヘルパー: CanvasをBlobに非同期変換
+        function canvasToBlob(canvas, mimeType, quality) {
+            return new Promise((resolve) => {
+                canvas.toBlob((blob) => resolve(blob), mimeType, quality);
+            });
+        }
+
+        // コア圧縮アルゴリズム：画質・解像度を最大限に保ちつつ目標上限のギリギリを攻める精密二分探索
+        async function compressImageToCeiling(img, file, selectedFormat, preset) {
+            const origW = img.naturalWidth;
+            const origH = img.naturalHeight;
+            const targetMaxBytes = preset.targetBytes;
+            const strictCeilingBytes = preset.ceilingBytes;
+
+            // 出力MIMEタイプの決定
+            let outputMime = selectedFormat;
+            if (outputMime === 'auto') {
+                if (file.type === 'image/png' && hasTransparency(img)) {
+                    outputMime = 'image/webp';
+                } else if (file.type === 'image/webp') {
+                    outputMime = 'image/webp';
+                } else {
+                    outputMime = 'image/jpeg';
+                }
+            }
+
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+
+            const renderAtScale = (scale) => {
+                const w = Math.max(1, Math.round(origW * scale));
+                const h = Math.max(1, Math.round(origH * scale));
+                canvas.width = w;
+                canvas.height = h;
+                ctx.clearRect(0, 0, w, h);
+                if (outputMime === 'image/jpeg') {
+                    ctx.fillStyle = '#FFFFFF';
+                    ctx.fillRect(0, 0, w, h);
+                }
+                ctx.imageSmoothingEnabled = true;
+                ctx.imageSmoothingQuality = 'high';
+                ctx.drawImage(img, 0, 0, w, h);
+                return { w, h };
+            };
+
+            let trials = 0;
+            let currentScale = 1.0;
+            let bestBlob = null;
+            let bestW = origW;
+            let bestH = origH;
+            let bestQuality = 1.0;
+
+            // 1. まずは100%オリジナル解像度でどこまで攻められるか検証
+            // その後、最低許容品質でも収まらない場合のみ、95%, 90%, 85%...と細かく解像度を下げてギリギリを探索
+            while (currentScale >= 0.1) {
+                const { w, h } = renderAtScale(currentScale);
+
+                // 最高品質 (q = 1.00) で目標以下に収まるかテスト
+                trials++;
+                const maxBlob = await canvasToBlob(canvas, outputMime, 1.0);
+                if (maxBlob && maxBlob.size <= targetMaxBytes) {
+                    bestBlob = maxBlob;
+                    bestW = w;
+                    bestH = h;
+                    bestQuality = 1.0;
+                    break;
+                }
+
+                // 高画質を維持できる下限品質 (100%解像度なら0.60まで粘り、縮小時は0.55まで許容)
+                const minAcceptableQ = currentScale === 1.0 ? 0.60 : 0.55;
+                trials++;
+                const minBlob = await canvasToBlob(canvas, outputMime, minAcceptableQ);
+
+                if (minBlob && minBlob.size <= targetMaxBytes) {
+                    // minAcceptableQ 〜 1.00 の間で14ステップの精密二分探索を実行し、限界ギリギリまで画質を詰め込む
+                    let low = minAcceptableQ;
+                    let high = 1.0;
+                    bestBlob = minBlob;
+                    bestW = w;
+                    bestH = h;
+                    bestQuality = minAcceptableQ;
+
+                    for (let i = 0; i < 14; i++) {
+                        const mid = (low + high) / 2;
+                        trials++;
+                        const testBlob = await canvasToBlob(canvas, outputMime, mid);
+                        if (testBlob && testBlob.size <= targetMaxBytes) {
+                            bestBlob = testBlob;
+                            bestQuality = mid;
+                            low = mid; // まだ余裕があるのでさらに高画質（サイズ大）側を攻める
+                        } else {
+                            high = mid; // 上限を超えたので少し品質を下げる
+                        }
+                        // 目標の99.5%以上に到達したら十分なギリギリ精度なので探索終了
+                        if (bestBlob.size >= targetMaxBytes * 0.995) {
+                            break;
+                        }
+                    }
+                    break;
+                }
+
+                // 品質を下げても目標を超える場合は、解像度を5%刻みで少しずつ下げて再探索
+                if (currentScale > 0.5) {
+                    currentScale = Math.round((currentScale - 0.05) * 100) / 100;
+                } else {
+                    currentScale *= 0.85;
+                }
+            }
+
+            // 万が一の超巨大画像向けフォールバック（必ず strictCeilingBytes 未満にする）
+            if (!bestBlob || bestBlob.size >= strictCeilingBytes) {
+                let fallbackScale = currentScale;
+                while (fallbackScale >= 0.05) {
+                    const { w, h } = renderAtScale(fallbackScale);
+                    trials++;
+                    const fbBlob = await canvasToBlob(canvas, outputMime, 0.45);
+                    if (fbBlob && fbBlob.size < strictCeilingBytes) {
+                        bestBlob = fbBlob;
+                        bestW = w;
+                        bestH = h;
+                        bestQuality = 0.45;
+                        break;
+                    }
+                    fallbackScale *= 0.8;
+                }
+            }
+
+            return {
+                blob: bestBlob,
+                width: bestW,
+                height: bestH,
+                mimeType: outputMime,
+                scalePercent: Math.round((bestW / origW) * 100),
+                qualityPercent: Math.round(bestQuality * 100),
+                trials
+            };
+        }
+
+        // ファイル処理エントリーポイント
+        async function handleFiles(fileList) {
+            const files = Array.from(fileList).filter(f => f.type.startsWith('image/'));
+            if (files.length === 0) {
+                showToast('対応している画像ファイル（JPEG, PNG, WebPなど）を選択してください。');
+                return;
+            }
+
+            const selectedFormat = formatSelect.value;
+            const presetKey = limitPresetSelect.value;
+            const preset = LIMIT_PRESETS[presetKey] || LIMIT_PRESETS.strict_giri;
+            const isDecimal = presetKey === 'decimal_giri';
+
+            for (const file of files) {
+                const id = 'img_' + Date.now() + '_' + Math.random().toString(36).substring(2, 8);
+                const origUrl = URL.createObjectURL(file);
+                const alreadyUnder = file.size < preset.ceilingBytes;
+
+                const item = {
+                    id,
+                    file,
+                    origUrl,
+                    compBlob: null,
+                    compUrl: null,
+                    origWidth: 0,
+                    origHeight: 0,
+                    compWidth: 0,
+                    compHeight: 0,
+                    status: 'processing',
+                    alreadyUnder,
+                    outputMime: file.type,
+                    note: '',
+                    metrics: null,
+                    ceilingBytes: preset.ceilingBytes,
+                    isDecimal
+                };
+
+                state.items.unshift(item);
+                renderUI();
+
+                // 非同期で圧縮実行
+                processSingleItem(item, selectedFormat, preset);
+            }
+        }
+
+        // 個別アイテムの圧縮処理
+        async function processSingleItem(item, selectedFormat, preset) {
+            try {
+                const img = await loadImageFromUrl(item.origUrl);
+                item.origWidth = img.naturalWidth;
+                item.origHeight = img.naturalHeight;
+
+                // 元画像がすでに上限未満で「自動最適化」モードの場合は、無意味な再圧縮を避けオリジナル最高画質をそのまま保持
+                if (item.alreadyUnder && selectedFormat === 'auto') {
+                    item.compBlob = item.file;
+                    item.compUrl = item.origUrl;
+                    item.compWidth = item.origWidth;
+                    item.compHeight = item.origHeight;
+                    item.outputMime = item.file.type;
+                    item.metrics = {
+                        scalePercent: 100,
+                        qualityPercent: 100,
+                        trials: 0,
+                        keptOriginal: true
+                    };
+                    item.note = 'すでに上限未満のため、劣化ゼロの元ファイルそのままを保持しました';
+                    item.status = 'done';
+                    renderUI();
+                    return;
+                }
+
+                const result = await compressImageToCeiling(img, item.file, selectedFormat, preset);
+
+                // 変換した結果、元のファイルサイズより大きくなった場合（かつ元が上限未満）は元を保持
+                if (item.alreadyUnder && result.blob.size >= item.file.size) {
+                    item.compBlob = item.file;
+                    item.compUrl = item.origUrl;
+                    item.compWidth = item.origWidth;
+                    item.compHeight = item.origHeight;
+                    item.outputMime = item.file.type;
+                    item.metrics = {
+                        scalePercent: 100,
+                        qualityPercent: 100,
+                        trials: result.trials,
+                        keptOriginal: true
+                    };
+                    item.note = '元ファイルの方が高画質・軽量なためオリジナルをそのまま保持しました';
+                } else {
+                    item.compBlob = result.blob;
+                    item.compUrl = URL.createObjectURL(result.blob);
+                    item.compWidth = result.width;
+                    item.compHeight = result.height;
+                    item.outputMime = result.mimeType;
+                    item.metrics = {
+                        scalePercent: result.scalePercent,
+                        qualityPercent: result.qualityPercent,
+                        trials: result.trials,
+                        keptOriginal: false
+                    };
+
+                    if (item.compWidth < item.origWidth) {
+                        item.note = `上限ギリギリに収めるため解像度を ${result.scalePercent}% に微調整し、画質 ${result.qualityPercent}% で最適化しました`;
+                    } else {
+                        item.note = `解像度100%を維持したまま、上限ギリギリの画質 ${result.qualityPercent}% に追い込みました`;
+                    }
+                }
+
+                item.status = 'done';
+            } catch (err) {
+                console.error(err);
+                item.status = 'error';
+                item.note = '画像の処理中にエラーが発生しました';
+            }
+            renderUI();
+        }
+
+        // 出力ファイル名生成
+        function getOutputFilename(item) {
+            const origName = item.file.name;
+            const dotIndex = origName.lastIndexOf('.');
+            const baseName = dotIndex !== -1 ? origName.substring(0, dotIndex) : origName;
+
+            let ext = 'jpg';
+            if (item.outputMime === 'image/webp') ext = 'webp';
+            else if (item.outputMime === 'image/png') ext = 'png';
+            else if (item.outputMime === 'image/jpeg') ext = 'jpg';
+
+            return `${baseName}_compressed.${ext}`;
+        }
+
+        // 個別ダウンロード
+        function downloadItem(id) {
+            const item = state.items.find(i => i.id === id);
+            if (!item || !item.compUrl) return;
+
+            const a = document.createElement('a');
+            a.href = item.compUrl;
+            a.download = getOutputFilename(item);
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+        }
+
+        // すべてダウンロード
+        downloadAllBtn.addEventListener('click', () => {
+            const doneItems = state.items.filter(i => i.status === 'done' && i.compUrl);
+            if (doneItems.length === 0) return;
+
+            doneItems.forEach((item, index) => {
+                setTimeout(() => {
+                    downloadItem(item.id);
+                }, index * 250);
+            });
+            showToast(`${doneItems.length}件の画像のダウンロードを開始しました`);
+        });
+
+        // すべてクリア
+        clearAllBtn.addEventListener('click', () => {
+            state.items.forEach(item => {
+                if (item.origUrl) URL.revokeObjectURL(item.origUrl);
+                if (item.compUrl && item.compUrl !== item.origUrl) URL.revokeObjectURL(item.compUrl);
+            });
+            state.items = [];
+            renderUI();
+            showToast('リストをクリアしました');
+        });
+
+        // 個別削除
+        function removeItem(id) {
+            const idx = state.items.findIndex(i => i.id === id);
+            if (idx === -1) return;
+            const item = state.items[idx];
+            if (item.origUrl) URL.revokeObjectURL(item.origUrl);
+            if (item.compUrl && item.compUrl !== item.origUrl) URL.revokeObjectURL(item.compUrl);
+            state.items.splice(idx, 1);
+            renderUI();
+        }
+
+        // UIレンダリング
+        function renderUI() {
+            if (state.items.length === 0) {
+                actionBar.classList.add('hidden');
+                actionBar.classList.remove('flex');
+                imageList.innerHTML = '';
+                return;
+            }
+
+            actionBar.classList.remove('hidden');
+            actionBar.classList.add('flex');
+
+            const doneCount = state.items.filter(i => i.status === 'done').length;
+            const procCount = state.items.filter(i => i.status === 'processing').length;
+
+            summaryCount.textContent = `${state.items.length}件の画像`;
+            if (procCount > 0) {
+                summaryStatus.textContent = `精密二分探索を実行中... (${doneCount}/${state.items.length} 完了)`;
+            } else {
+                summaryStatus.textContent = `すべての画像のギリギリ最適化が完了しました`;
+            }
+
+            if (doneCount >= 2) {
+                downloadAllBtn.classList.remove('hidden');
+            } else {
+                downloadAllBtn.classList.add('hidden');
+            }
+
+            imageList.innerHTML = state.items.map(item => {
+                if (item.status === 'processing') {
+                    return `
+                        <div class="bg-white rounded-2xl border border-slate-200/80 p-4 sm:p-5 shadow-sm flex items-center gap-4 animate-pulse">
+                            <div class="w-16 h-16 sm:w-20 sm:h-20 rounded-xl bg-slate-100 shrink-0 overflow-hidden flex items-center justify-center">
+                                <img src="${item.origUrl}" alt="" class="w-full h-full object-cover opacity-60">
+                            </div>
+                            <div class="flex-1 min-w-0 space-y-2">
+                                <p class="font-semibold text-sm text-slate-800 truncate">${escapeHtml(item.file.name)}</p>
+                                <div class="flex items-center gap-2 text-xs text-brand-600 font-medium">
+                                    <svg class="animate-spin h-4 w-4 text-brand-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                    </svg>
+                                    <span>3MBギリギリの最高画質ポイントを二分探索中... (${formatBytes(item.file.size, item.isDecimal)})</span>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                }
+
+                if (item.status === 'error') {
+                    return `
+                        <div class="bg-white rounded-2xl border border-red-200 p-4 sm:p-5 shadow-sm flex items-center justify-between gap-4">
+                            <div class="flex items-center gap-3 min-w-0">
+                                <div class="w-10 h-10 rounded-xl bg-red-50 text-red-500 flex items-center justify-center shrink-0">
+                                    <i data-lucide="alert-circle" class="w-5 h-5"></i>
+                                </div>
+                                <div class="min-w-0">
+                                    <p class="font-semibold text-sm text-slate-800 truncate">${escapeHtml(item.file.name)}</p>
+                                    <p class="text-xs text-red-600">${item.note}</p>
+                                </div>
+                            </div>
+                            <button type="button" onclick="removeItem('${item.id}')" class="p-2 text-slate-400 hover:text-slate-600 rounded-lg">
+                                <i data-lucide="x" class="w-4 h-4"></i>
+                            </button>
+                        </div>
+                    `;
+                }
+
+                const origSize = item.file.size;
+                const compSize = item.compBlob.size;
+                const ceiling = item.ceilingBytes;
+                const fillRatio = Math.min(100, (compSize / ceiling) * 100);
+                const fillRatioText = fillRatio.toFixed(1);
+                const isUnderCeiling = compSize < ceiling;
+                const isGiriGiri = fillRatio >= 96.0 && isUnderCeiling;
+
+                const savedBytes = origSize - compSize;
+                const savedPercent = origSize > 0 ? Math.round((savedBytes / origSize) * 100) : 0;
+
+                const badgeHtml = item.metrics && item.metrics.keptOriginal
+                    ? `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-sky-50 text-sky-700 border border-sky-200/70">劣化ゼロ・元データ維持</span>`
+                    : isGiriGiri
+                        ? `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-amber-50 text-amber-700 border border-amber-300/80">🎯 ギリギリ達成 (${fillRatioText}%)</span>`
+                        : `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200/70">3MB未満達成</span>`;
+
+                const reductionBadge = savedPercent > 0
+                    ? `<span class="text-xs font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md">-${savedPercent}% 削減</span>`
+                    : `<span class="text-xs font-medium text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md">サイズ維持</span>`;
+
+                const barColorClass = isGiriGiri
+                    ? 'bg-gradient-to-r from-brand-500 via-indigo-500 to-emerald-500'
+                    : 'bg-brand-500';
+
+                const metricsTags = item.metrics && !item.metrics.keptOriginal
+                    ? `
+                        <div class="flex flex-wrap items-center gap-1.5 pt-0.5">
+                            <span class="inline-flex items-center px-2 py-0.5 rounded bg-slate-100 text-slate-600 text-[11px] font-medium">解像度: ${item.metrics.scalePercent}%</span>
+                            <span class="inline-flex items-center px-2 py-0.5 rounded bg-slate-100 text-slate-600 text-[11px] font-medium">画質q値: ${item.metrics.qualityPercent}%</span>
+                            <span class="inline-flex items-center px-2 py-0.5 rounded bg-slate-100 text-slate-600 text-[11px] font-medium">探索試行: ${item.metrics.trials}回</span>
+                            <span class="inline-flex items-center px-2 py-0.5 rounded bg-slate-100 text-slate-500 text-[11px] font-mono">${compSize.toLocaleString()} bytes</span>
+                        </div>
+                    `
+                    : `
+                        <div class="flex flex-wrap items-center gap-1.5 pt-0.5">
+                            <span class="inline-flex items-center px-2 py-0.5 rounded bg-slate-100 text-slate-600 text-[11px] font-medium">解像度: 100%</span>
+                            <span class="inline-flex items-center px-2 py-0.5 rounded bg-slate-100 text-slate-600 text-[11px] font-medium">オリジナル保持</span>
+                            <span class="inline-flex items-center px-2 py-0.5 rounded bg-slate-100 text-slate-500 text-[11px] font-mono">${compSize.toLocaleString()} bytes</span>
+                        </div>
+                    `;
+
+                return `
+                    <div class="bg-white rounded-2xl border border-slate-200/90 p-4 sm:p-5 shadow-sm hover:shadow-md transition-shadow">
+                        <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                            <!-- 左側: サムネイルと情報 -->
+                            <div class="flex items-start sm:items-center gap-4 min-w-0 flex-1">
+                                <div onclick="openCompareModal('${item.id}')" class="group relative w-20 h-20 sm:w-24 sm:h-24 rounded-xl bg-slate-100 border border-slate-200/80 shrink-0 overflow-hidden cursor-pointer">
+                                    <img src="${item.compUrl}" alt="プレビュー" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200">
+                                    <div class="absolute inset-0 bg-slate-900/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white text-[11px] font-semibold gap-1">
+                                        <i data-lucide="zoom-in" class="w-3.5 h-3.5"></i>
+                                        <span>比較</span>
+                                    </div>
+                                </div>
+
+                                <div class="min-w-0 flex-1 space-y-2">
+                                    <div class="flex flex-wrap items-center gap-2">
+                                        <p class="font-bold text-sm sm:text-base text-slate-900 truncate max-w-[240px] sm:max-w-sm" title="${escapeHtml(item.file.name)}">
+                                            ${escapeHtml(item.file.name)}
+                                        </p>
+                                        ${badgeHtml}
+                                    </div>
+
+                                    <!-- サイズ比較グリッド -->
+                                    <div class="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs sm:text-sm">
+                                        <div class="flex items-center gap-1.5 text-slate-500">
+                                            <span>元:</span>
+                                            <span class="font-semibold text-slate-700">${formatBytes(origSize, item.isDecimal)}</span>
+                                            <span class="text-[11px] text-slate-400">(${item.origWidth}×${item.origHeight})</span>
+                                        </div>
+
+                                        <i data-lucide="arrow-right" class="w-3.5 h-3.5 text-slate-400 hidden sm:inline"></i>
+
+                                        <div class="flex items-center gap-1.5">
+                                            <span class="text-slate-500">圧縮後:</span>
+                                            <span class="font-bold ${isUnderCeiling ? 'text-brand-600' : 'text-red-600'} text-sm sm:text-base">${formatBytes(compSize, item.isDecimal)}</span>
+                                            <span class="text-[11px] text-slate-400">(${item.compWidth}×${item.compHeight})</span>
+                                        </div>
+
+                                        ${reductionBadge}
+                                    </div>
+
+                                    <!-- 3MB上限充填率プログレスバー -->
+                                    <div class="space-y-1 max-w-md">
+                                        <div class="flex items-center justify-between text-[11px]">
+                                            <span class="font-semibold text-slate-600">容量充填率 (上限 ${formatBytes(ceiling, item.isDecimal)} に対する割合)</span>
+                                            <span class="font-bold ${isGiriGiri ? 'text-emerald-600' : 'text-brand-600'}">${fillRatioText}%</span>
+                                        </div>
+                                        <div class="w-full h-2 bg-slate-100 rounded-full overflow-hidden border border-slate-200/60">
+                                            <div class="h-full ${barColorClass} rounded-full transition-all duration-500" style="width: ${fillRatio}%"></div>
+                                        </div>
+                                    </div>
+
+                                    ${metricsTags}
+
+                                    <p class="text-xs text-slate-500 flex items-center gap-1.5">
+                                        <i data-lucide="check-circle-2" class="w-3.5 h-3.5 text-emerald-500 shrink-0"></i>
+                                        <span>${item.note}</span>
+                                    </p>
+                                </div>
+                            </div>
+
+                            <!-- 右側: アクションボタン -->
+                            <div class="flex items-center justify-end gap-2 pt-3 md:pt-0 border-t md:border-t-0 border-slate-100 shrink-0">
+                                <button type="button" onclick="openCompareModal('${item.id}')" class="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-semibold transition-colors" title="圧縮前後の画質を比較">
+                                    <i data-lucide="eye" class="w-4 h-4 text-slate-500"></i>
+                                    <span>画質比較</span>
+                                </button>
+                                <button type="button" onclick="downloadItem('${item.id}')" class="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 active:scale-[0.98] text-white text-xs sm:text-sm font-semibold shadow-sm shadow-brand-600/20 transition-all">
+                                    <i data-lucide="download" class="w-4 h-4"></i>
+                                    <span>ダウンロード</span>
+                                </button>
+                                <button type="button" onclick="removeItem('${item.id}')" class="p-2 rounded-xl text-slate-400 hover:text-red-500 hover:bg-red-50 transition-colors" title="リストから削除">
+                                    <i data-lucide="trash-2" class="w-4 h-4"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            lucide.createIcons();
+        }
+
+        // HTMLエスケープ
+        function escapeHtml(str) {
+            return str.replace(/[&<>"']/g, (m) => ({
+                '&': '&amp;',
+                '<': '&lt;',
+                '>': '&gt;',
+                '"': '&quot;',
+                "'": '&#39;'
+            }[m]));
+        }
+
+        // モーダル制御
+        function openCompareModal(id) {
+            const item = state.items.find(i => i.id === id);
+            if (!item || item.status !== 'done') return;
+
+            state.modalItem = item;
+            modalTitle.textContent = item.file.name;
+            modalSubtitle.textContent = `元のサイズ: ${formatBytes(item.file.size)} (${item.origWidth}×${item.origHeight}) → 圧縮後: ${formatBytes(item.compBlob.size)} (${item.compWidth}×${item.compHeight})`;
+
+            modalOrigImg.src = item.origUrl;
+            modalCompImg.src = item.compUrl;
+            modalOrigMeta.textContent = `${formatBytes(item.file.size)} / ${item.origWidth}×${item.origHeight}`;
+            modalCompMeta.textContent = `${formatBytes(item.compBlob.size)} / ${item.compWidth}×${item.compHeight}`;
+
+            setModalMode('side');
+            compareModal.classList.remove('hidden');
+            document.body.style.overflow = 'hidden';
+        }
+
+        function closeCompareModal() {
+            compareModal.classList.add('hidden');
+            document.body.style.overflow = '';
+            state.modalItem = null;
+        }
+
+        function setModalMode(mode) {
+            state.modalMode = mode;
+            if (mode === 'side') {
+                tabSideBySide.className = 'px-3 py-1.5 rounded-lg bg-white text-slate-800 shadow-sm transition-all';
+                tabToggleView.className = 'px-3 py-1.5 rounded-lg text-slate-600 hover:text-slate-900 transition-all';
+                sideBySideContainer.classList.remove('hidden');
+                sideBySideContainer.classList.add('grid');
+                singleToggleContainer.classList.add('hidden');
+                singleToggleContainer.classList.remove('flex');
+                toggleControls.classList.add('hidden');
+                toggleControls.classList.remove('flex');
+            } else {
+                tabToggleView.className = 'px-3 py-1.5 rounded-lg bg-white text-slate-800 shadow-sm transition-all';
+                tabSideBySide.className = 'px-3 py-1.5 rounded-lg text-slate-600 hover:text-slate-900 transition-all';
+                sideBySideContainer.classList.add('hidden');
+                sideBySideContainer.classList.remove('grid');
+                singleToggleContainer.classList.remove('hidden');
+                singleToggleContainer.classList.add('flex');
+                toggleControls.classList.remove('hidden');
+                toggleControls.classList.add('flex');
+                setToggleTarget('comp');
+            }
+        }
+
+        function setToggleTarget(target) {
+            state.toggleTarget = target;
+            const item = state.modalItem;
+            if (!item) return;
+
+            if (target === 'orig') {
+                showOriginalBtn.className = 'px-3 py-1 rounded-lg text-xs font-semibold bg-slate-800 text-white';
+                showCompressedBtn.className = 'px-3 py-1 rounded-lg text-xs font-semibold bg-slate-200 text-slate-700';
+                modalSingleImg.src = item.origUrl;
+                singleViewLabel.textContent = '元の画像を表示中';
+                singleViewLabel.className = 'text-slate-700';
+                singleViewMeta.textContent = `${formatBytes(item.file.size)} (${item.origWidth}×${item.origHeight})`;
+            } else {
+                showCompressedBtn.className = 'px-3 py-1 rounded-lg text-xs font-semibold bg-brand-600 text-white';
+                showOriginalBtn.className = 'px-3 py-1 rounded-lg text-xs font-semibold bg-slate-200 text-slate-700';
+                modalSingleImg.src = item.compUrl;
+                singleViewLabel.textContent = '圧縮後の画像を表示中';
+                singleViewLabel.className = 'text-brand-700';
+                singleViewMeta.textContent = `${formatBytes(item.compBlob.size)} (${item.compWidth}×${item.compHeight})`;
+            }
+        }
+
+        closeModalBtn.addEventListener('click', closeCompareModal);
+        compareModal.addEventListener('click', (e) => {
+            if (e.target === compareModal) closeCompareModal();
+        });
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && !compareModal.classList.contains('hidden')) {
+                closeCompareModal();
+            }
+        });
+        tabSideBySide.addEventListener('click', () => setModalMode('side'));
+        tabToggleView.addEventListener('click', () => setModalMode('toggle'));
+        showOriginalBtn.addEventListener('click', () => setToggleTarget('orig'));
+        showCompressedBtn.addEventListener('click', () => setToggleTarget('comp'));
+    </script>
+</body>
+</html>
